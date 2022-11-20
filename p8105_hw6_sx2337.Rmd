@@ -144,6 +144,12 @@ Baltimore_model=
   homocide_data_new %>% 
   filter(city_state=="Baltimore, MD") %>% 
   glm(resolved ~ victim_age+victim_race+victim_sex, data=., family= binomial(link = "logit")) 
+
+
+#save as an R object
+save(Baltimore_model, file = "results/Baltimore_model.RData")
+
+
 ```
 
 
