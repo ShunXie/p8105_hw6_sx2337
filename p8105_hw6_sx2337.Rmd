@@ -2,7 +2,7 @@
 title: "p8105_hw6_sx2337"
 author: "Shun Xie"
 date: "2022-11-20"
-output: html_document
+output: github_document
 ---
 
 ```{r setup, include=FALSE}
@@ -35,14 +35,95 @@ weather_df =
 
 for $r^2$
 ```{r}
-weather_df %>% 
+results_df = 
+  weather_df %>% 
   modelr::bootstrap(n = 5000) %>% 
   mutate(
     models = map(strap, ~ lm(tmax ~ tmin, data = .x)),
     results_r = map(models, broom::glance),
-    results_beta = map(models, broom::tidy))
+    results_beta = map(models, broom::tidy)) 
 ```
 
+```{r}
+r_val_info = 
+  results_df %>% 
+  select(results_r) %>% 
+  unnest()
+
+r_val_info %>% 
+  ggplot(aes(x = r.squared)) + geom_density()
+```
+```{r}
+r_val_info %>% 
+  summarize(
+    mean_Val = mean(r.squared),
+    median_val = median(r.squared),
+    se = sd(r.squared),
+    "2.5-quantile" = mean(r.squared)+qnorm(0.025)*sd(r.squared),
+    "97.5-quantile" = mean(r.squared)+qnorm(0.775)*sd(r.squared)
+  )
+```
+
+R square is likely to be symmetrically distributed with mean 0.91 and median 0.91. 
+
+The 2.5% quantile and 97.5% quantile is therefore:
+0.894 to 0.918.
+
+For log_value of beta_0 and beta_1:
+```{r, warning=FALSE}
+logbeta_val_info = 
+  results_df %>% 
+  select(results_beta) %>% 
+  unnest(results_beta) %>% 
+  select(term, estimate) %>% 
+  pivot_wider(
+    names_from = term,
+    values_from = estimate
+  ) %>% 
+  janitor::clean_names() %>% 
+  unnest() %>% 
+  mutate(logval = log(intercept+tmin))
+
+logbeta_val_info %>% 
+  ggplot(aes(x = logval)) + geom_density()
+```
+```{r}
+logbeta_val_info %>% 
+  summarize(
+    mean_Val = mean(logval),
+    median_val = median(logval),
+    se = sd(logval),
+    "2.5-quantile" = mean(logval)+qnorm(0.025)*sd(logval),
+    "97.5-quantile" = mean(logval)+qnorm(0.775)*sd(logval)
+  )
+```
+
+log value of $log(\beta_0+\beta_1)$ is likely to be symmetrically distributed with mean 2.11 and median 2.11. 
+
+The 2.5% quantile and 97.5% quantile is therefore:
+2.053 to 2.132.
+
+
+# Problem 2
+
+In this question, will explore the homocides data in 50 large US cities. 
+```{r}
+homocide_data = read_csv("data/homicide-data.csv", show_col_types = FALSE) %>% 
+  replace(is.na(.),0)
+homocide_data
+```
+
+Then, create a city_state variable to combine city and state together, as well as a binary variable indicating solved and non-solved case.
+
+```{r}
+homocide_data_new = 
+  homocide_data %>%
+  mutate(city_state = str_c(city, ", ", state)) %>% 
+  mutate(Whether_solved = ifelse(homocide_data$disposition=='Closed without arrest' | homocide_data$disposition=='Open/No arrest',0,1))
+
+homocide_data_new %>% 
+  select(city_state, Whether_solved)
+```
 
 
 
