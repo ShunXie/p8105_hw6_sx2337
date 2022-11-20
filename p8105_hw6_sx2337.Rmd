@@ -113,18 +113,58 @@ homocide_data = read_csv("data/homicide-data.csv", show_col_types = FALSE) %>%
 homocide_data
 ```
 
-Then, create a city_state variable to combine city and state together, as well as a binary variable indicating solved and non-solved case.
+Then, create a city_state variable to combine city and state together, as well as a binary variable indicating solved and non-solved case. Also omit cities as required in the question. Additionally, only consider victim_race as white or black so only include white and black race. Note that there is some cases where victim_age is unknown and victim_sex has unknown values, discard them
 
 ```{r}
 homocide_data_new = 
   homocide_data %>%
   mutate(city_state = str_c(city, ", ", state)) %>% 
-  mutate(Whether_solved = ifelse(homocide_data$disposition=='Closed without arrest' | homocide_data$disposition=='Open/No arrest',0,1))
+  mutate(resolved = as.numeric(disposition == "Closed by arrest")) %>% 
+  filter(!city_state=="Dallas, TX", !city_state=="Phoenix, AZ", !city_state=="Kansas City, MO", !city_state=="Dallas, TX") %>% 
+  filter(victim_race=="White" | victim_race=="Black") %>% 
+  mutate(victim_race = fct_relevel(victim_race, "White")) %>% 
+  filter(!victim_age=="Unknown",
+         !victim_sex=="Unknown") %>% 
+  mutate(victim_age = as.numeric(victim_age),
+         victim_sex = ifelse(victim_sex=="Male",1,0))
+         
 
-homocide_data_new %>% 
-  select(city_state, Whether_solved)
+homocide_data_new 
 ```
 
+
+Now as required, use the glm function to fit a logistic regression with resolved vs unresolved as the outcome and victim age, sex and race as predictors for the city of Baltimore, MD. 
+
+
+```{r,warning=FALSE}
+# save the glm as r object
+Baltimore_model= 
+  homocide_data_new %>% 
+  filter(city_state=="Baltimore, MD") %>% 
+  glm(resolved ~ victim_age+victim_race+victim_sex, data=., family= binomial(link = "logit")) 
+```
+
+
+Based on the model, can obtain the log odds ratio estimate and confidence interval. After that, transfer to odds ratio by taking exponential of all values calculated. 
+```{r}
+Baltimore_model %>% 
+  broom::tidy() %>% 
+  mutate(lower_conf = confint(Baltimore_model)[,1],
+         upper_conf = confint(Baltimore_model)[,2]) %>% 
+  select(estimate, lower_conf, upper_conf) %>% 
+  mutate(estimate = exp(estimate),
+         lower_conf = exp(lower_conf),
+         upper_conf = exp(upper_conf))
+  
+```
+
+
+Repeat the process to all cities:
+
+```{r}
+
+
+```
 
 
 
