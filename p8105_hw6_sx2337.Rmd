@@ -10,6 +10,8 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 ```{r}
 suppressMessages(library(tidyverse))
+suppressMessages(library(modelr))
+
 suppressMessages(library(dbplyr))
 options(tibble.print_min = 5)
 
@@ -198,7 +200,91 @@ ggplot(distinct_cities_df, aes(x=fct_reorder(city_state, estimate), y=estimate))
   labs(title = "Number of unsolved homocide among cities", )+xlab("City")+
   theme(axis.text.x = element_text(angle = 80, hjust = 1))
 ```
+
 Can be ssen on the plot, most of the cities have an estimate less than one, meaning that male are less likely to have a solved case than female, which is set to be the base line of the logistic regression. Some cities like New York, Baton Rouge, Chicago etc have an interval that does not intercept 1, meaning that these cities have a significant difference for solving cases between gender. It is likely that female has a greater chance to have a homocide case solved than male. On ther other hand, the city of Albuquerque, NM have a much higher estimate for male to have a case solved. But the confidence interval overlap the value of one, so we do not have enough evidence to prove that male and female have significantly difference in number of unsolved case.
 
 
 # Problem 3
+
+First, load and have a look at the data. 
+```{r}
+birthweight = read_csv("data/birthweight.csv", show_col_types = FALSE)
+birthweight
+sum(is.na(birthweight))
+```
+The data has 4342 samples with 20 variables. The frace, mrace are in numeric value. Thus, need to change them into factors. Additionally, gender may also be changed to factors There is no missing value but there are some values that has unknown value. Thus, need to discard the unknown value. The other values are in numerical form. 
+
+
+```{r}
+birthweight_adpt = 
+  birthweight %>% 
+  mutate(
+    frace = recode(frace, `1` = "White", `2` = "Black", `3` = "Asian", `4` = "Puerto Rican", `8` = "Other", `9` = "Unknown"),
+    mrace = recode(mrace, `1` = "White", `2` = "Black", `3` = "Asian", `4` = "Puerto Rican", `8` = "Other"),
+    babysex = recode(babysex, `1` = "Male", `2` = "Female")
+    )%>% 
+    filter(frace!="Unknown") %>%
+  mutate(
+    frace = fct_relevel(frace, "White"),
+    mrace = fct_relevel(mrace, "White"),
+    babysex = fct_relevel(babysex,"Female")
+         )
+birthweight_adpt
+```
+First hypothesis that all factors are related to baby's weight. For instance, a female baby may likely to have different weight than male baby due to different biological structure. Also other factors such as family income may also be related to baby's weight because a affluent family may have a better diet and therefore baby may have more nutrition than those family in poverty. Therefore, I choose all the factors to start with, and using backward selection to select the model.
+
+```{r}
+# Fit the full model 
+Full_model <- lm(bwt ~., data = birthweight_adpt)
+# begin stepwise procedure
+Stepwise_model <- MASS::stepAIC(Full_model, direction = "backward", trace = FALSE)
+summary(Stepwise_model)
+```
+Based on the model selected, I plot the residuals against fitted values:
+
+```{r}
+birthweight_adpt %>% 
+  add_predictions(Stepwise_model) %>% 
+  add_residuals(Stepwise_model) %>% 
+  ggplot(aes(x = pred, y = resid)) + geom_point() +
+  labs(title = "Residuals against fitted values plot", )+xlab("fitted value")+ylab("residuals")
+
+```
+
+Although the plot may show some trends, the overall fitting is okay and the model has a relatively high r square hence the model has a relatively high explained variance. 
+
+Now fit the other two models as well as the chosen stepwise model using cross validation.
+
+```{r, warning=FALSE}
+#first create a dataframe 
+cv_df =
+  crossv_mc(birthweight_adpt, 100) %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble))
+
+#then fit three models:
+cv_df = 
+  cv_df %>% 
+  mutate(
+    my_model  = map(train, ~lm( bwt ~ babysex + bhead + blength + delwt + fincome + 
+    gaweeks + mheight + mrace + parity + ppwt + smoken, data = .x)),
+    main_effect_model  = map(train, ~lm(bwt ~ gaweeks + blength, data = .x)),
+    interactive_model  = map(train, ~lm(bwt ~ bhead*blength*babysex, data = .x))) %>% 
+  mutate(
+    rmse_my_model = map2_dbl(my_model, test, ~rmse(model = .x, data = .y)),
+    rmse_main_effect    = map2_dbl(main_effect_model, test, ~rmse(model = .x, data = .y)),
+    rmse_interactive = map2_dbl(interactive_model, test, ~rmse(model = .x, data = .y)))
+
+#Get the summarize the result:
+cv_df %>% 
+  summarize(
+    rmse_my_model_mean = mean(rmse_my_model),
+    rmse_main_effect_mean = mean(rmse_main_effect),
+    rmse_interactive_meam = mean(rmse_interactive)
+  )
+```
+
+As indicated by the RMSE results, my model has the lowest rmse, with a decent adjusted r square value (which also considered the complexity of the model). Therefore, I choose my model with baby's sex, baby head circumference, baby's length at birth, mother weight at delivery, family monthly income,
+    gestational age in weeks, mother's height, mother race, number of live births prior to this pregnancy, mother's pre-pregnancy BMI and mother's weight gain during pregnancy as predictors. 
+
