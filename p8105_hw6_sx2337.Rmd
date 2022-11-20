@@ -120,7 +120,7 @@ homocide_data_new =
   homocide_data %>%
   mutate(city_state = str_c(city, ", ", state)) %>% 
   mutate(resolved = as.numeric(disposition == "Closed by arrest")) %>% 
-  filter(!city_state=="Dallas, TX", !city_state=="Phoenix, AZ", !city_state=="Kansas City, MO", !city_state=="Dallas, TX") %>% 
+  filter(!city_state=="Dallas, TX", !city_state=="Phoenix, AZ", !city_state=="Kansas City, MO", !city_state=="Tulsa, AL") %>% 
   filter(victim_race=="White" | victim_race=="Black") %>% 
   mutate(victim_race = fct_relevel(victim_race, "White")) %>% 
   filter(!victim_age=="Unknown",
@@ -151,20 +151,54 @@ Baltimore_model %>%
   broom::tidy() %>% 
   mutate(lower_conf = confint(Baltimore_model)[,1],
          upper_conf = confint(Baltimore_model)[,2]) %>% 
+  filter(term=='victim_sex') %>% 
   select(estimate, lower_conf, upper_conf) %>% 
   mutate(estimate = exp(estimate),
          lower_conf = exp(lower_conf),
          upper_conf = exp(upper_conf))
   
 ```
-
+Therefore, in comparison to the baseline which is female, male has 0.425 times higher odds chance of getting a resolved case. Meaning that male has a lower chance to have a solved case than female. 
 
 Repeat the process to all cities:
 
 ```{r}
 
 
+distinct_cities_df = 
+  homocide_data_new %>% 
+  select(city_state, victim_race:victim_sex, resolved) %>% 
+  nest(sample = victim_race:resolved) %>% 
+  mutate(
+    models = map(sample, ~glm(resolved ~ victim_age+victim_race+victim_sex, family= binomial(link = "logit"), data=.x)),
+    results = map(models, broom::tidy),
+    conf_int = map(models, ~confint(.x,"victim_sex"))
+  ) %>% 
+  select(city_state,results,conf_int) %>% 
+  unnest(results) %>% 
+  unnest_wider(conf_int) %>% 
+  filter(term=="victim_sex") %>% 
+  select(city_state,estimate,`2.5 %`,`97.5 %`) %>% 
+  #convert to odds scale
+  mutate(
+    estimate=exp(estimate),
+    `2.5 %` =exp(`2.5 %`),
+    `97.5 %` = exp(`97.5 %`)
+    )
+  
+
+distinct_cities_df
 ```
 
+Now create a plot as following:
+```{r}
+ggplot(distinct_cities_df, aes(x=fct_reorder(city_state, estimate), y=estimate))+
+  geom_point()+
+  geom_errorbar(aes(ymin=`2.5 %`, ymax=`97.5 %`))+
+  labs(title = "Number of unsolved homocide among cities", )+xlab("City")+
+  theme(axis.text.x = element_text(angle = 80, hjust = 1))
+```
+Can be ssen on the plot, most of the cities have an estimate less than one, meaning that male are less likely to have a solved case than female, which is set to be the base line of the logistic regression. Some cities like New York, Baton Rouge, Chicago etc have an interval that does not intercept 1, meaning that these cities have a significant difference for solving cases between gender. It is likely that female has a greater chance to have a homocide case solved than male. On ther other hand, the city of Albuquerque, NM have a much higher estimate for male to have a case solved. But the confidence interval overlap the value of one, so we do not have enough evidence to prove that male and female have significantly difference in number of unsolved case.
 
 
+# Problem 3
