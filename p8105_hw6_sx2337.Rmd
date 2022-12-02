@@ -8,7 +8,7 @@ output: github_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-```{r}
+```{r, warning=FALSE}
 suppressMessages(library(tidyverse))
 suppressMessages(library(modelr))
 
@@ -170,7 +170,7 @@ Therefore, in comparison to the baseline which is female, male has 0.425 times h
 
 Repeat the process to all cities:
 
-```{r}
+```{r,message=FALSE}
 
 
 distinct_cities_df = 
@@ -237,7 +237,8 @@ birthweight_adpt =
          )
 birthweight_adpt
 ```
-First hypothesis that all factors are related to baby's weight. For instance, a female baby may likely to have different weight than male baby due to different biological structure. Also other factors such as family income may also be related to baby's weight because a affluent family may have a better diet and therefore baby may have more nutrition than those family in poverty. Therefore, I choose all the factors to start with, and using backward selection to select the model.
+
+First assume that all factors are related to baby's weight. For instance, a female baby may likely to have different weight than male baby due to different biological structure. Also other factors such as family income may also be related to baby's weight because a affluent family may have a better diet and therefore baby may have more nutrition than those family in poverty. Therefore, I choose all the factors to start with, and using backward selection to select the model.
 
 ```{r}
 # Fit the full model 
@@ -246,18 +247,20 @@ Full_model <- lm(bwt ~., data = birthweight_adpt)
 Stepwise_model <- MASS::stepAIC(Full_model, direction = "backward", trace = FALSE)
 summary(Stepwise_model)
 ```
+
 Based on the model selected, I plot the residuals against fitted values:
 
 ```{r}
 birthweight_adpt %>% 
   add_predictions(Stepwise_model) %>% 
   add_residuals(Stepwise_model) %>% 
-  ggplot(aes(x = pred, y = resid)) + geom_point() +
+  ggplot(aes(x = pred, y = resid)) + geom_point() + 
+  geom_smooth()+
   labs(title = "Residuals against fitted values plot", )+xlab("fitted value")+ylab("residuals")
 
 ```
 
-Although the plot may show some trends, the overall fitting is okay and the model has a relatively high r square hence the model has a relatively high explained variance. 
+The plot shows that residuals clustered in one place and it seems like the variance is different along the fitted values. On the other hand, the model has a relatively high r square hence the model has a relatively high explained variance. 
 
 Now fit the other two models as well as the chosen stepwise model using cross validation.
 
